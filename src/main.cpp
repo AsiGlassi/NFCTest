@@ -62,7 +62,7 @@ bool nfcConnect() {
 }
 
 
-void handleCardDetected() {
+void readPassiveCard() {
   
   bool success;
   // Buffer to store the UID
@@ -107,8 +107,8 @@ void setup(void)
 
 
 void loop(void)
-{
-  handleCardDetected();
+{ 
+  readPassiveCard();
   delay(750);
 }
 
