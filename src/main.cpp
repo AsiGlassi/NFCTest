@@ -29,59 +29,30 @@
 // Or use this line for a breakout or shield with an I2C connection:
 Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
 
+const int DELAY_BETWEEN_CARDS = 500;
+long timeLastCardRead = 0;
 volatile bool connected = false;
+boolean readerDisabled = false;
+volatile bool cardReadWaiting = false;
 
 
-bool nfcConnect() {
-  
-  nfc.begin();
-
-  // Connected, show version
-  uint32_t versiondata = nfc.getFirmwareVersion();
-  if (! versiondata)
-  {
-    Serial.println("PN53x card not found!");
-    return false;
-  }
-
-  //port
-  Serial.print("Found chip PN5"); Serial.println((versiondata >> 24) & 0xFF, HEX);
-  Serial.print("Firmware version: "); Serial.print((versiondata >> 16) & 0xFF, DEC);
-  Serial.print('.'); Serial.println((versiondata >> 8) & 0xFF, DEC);
-
-  // Set the max number of retry attempts to read from a card
-  // This prevents us from waiting forever for a card, which is
-  // the default behaviour of the PN532.
-  nfc.setPassiveActivationRetries(0x0A);
-
-  // configure board to read RFID tags
-  nfc.SAMConfig();
-
-  Serial.println("Waiting for card (ISO14443A Mifare)...");
-  return true;
-}
-
-
-void readPassiveCard() {
+void handleCardDetected() {
   
   bool success;
+
+  Serial.println("Handelling");
+
   // Buffer to store the UID
   uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };
   // UID size (4 or 7 bytes depending on card type)
   uint8_t uidLength;
 
-  while (!connected) {
-    connected = nfcConnect();
-  }
-
-  // Wait for an ISO14443A type cards (Mifare, etc.).  When one is found
-  // 'uid' will be populated with the UID, and uidLength will indicate
-  // if the uid is 4 bytes (Mifare Classic) or 7 bytes (Mifare Ultralight)
-  success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, &uid[0], &uidLength);
+    // read the NFC tag's info
+    success = nfc.readDetectedPassiveTargetID(uid, &uidLength);
+    Serial.println(success ? "Read successful" : "Read failed (not a card?)");
 
   // If the card is detected, print the UID
   if (success) {
-    Serial.println("Card Read");
     Serial.print("Size of UID: "); Serial.print(uidLength, DEC);
     Serial.println(" bytes");
     Serial.print("UID: ");
@@ -92,23 +63,76 @@ void readPassiveCard() {
     Serial.println("\n\n");
         
     delay(1000);
-  } else {
-    // PN532 probably timed out waiting for a card
-    Serial.println("Timed out waiting for a card");
+    }
+
+    // The reader will be enabled again after DELAY_BETWEEN_CARDS ms will pass.
+    readerDisabled = true;
+    cardReadWaiting = false;
+    timeLastCardRead = millis();
+}
+
+void IRAM_ATTR detectsNFCCard() {
+  Serial.printf("\nCard detected Interupt ... %lu\n", micros() );
+  detachInterrupt(PN532_IRQ); 
+  cardReadWaiting = true;
+}
+
+void startListeningToNFC() {
+  Serial.println("StartListeningToNFC - Waiting for card (ISO14443A Mifare)...");
+
+  //Enable interrupt after starting NFC
+  nfc.startPassiveTargetIDDetection(PN532_MIFARE_ISO14443A);
+  delay(10);
+  attachInterrupt(PN532_IRQ, detectsNFCCard, FALLING); 
+}
+
+bool nfcConnect() {
+  
+  nfc.begin();
+
+  // Connected, show version
+  uint32_t versiondata = nfc.getFirmwareVersion();
+  if (! versiondata) {
+    Serial.println("\nDidn't find PN53x board !!!\n");
+    return false;
   }
+
+  //port
+  Serial.print("Found chip PN5"); Serial.println((versiondata >> 24) & 0xFF, HEX);
+  Serial.print("Firmware version: "); Serial.print((versiondata >> 16) & 0xFF, DEC);
+  Serial.print('.'); Serial.println((versiondata >> 8) & 0xFF, DEC);
+
+  // configure board to read RFID tags
+  nfc.SAMConfig();
+
+  startListeningToNFC();
+  return true;
 }
 
 
 void setup(void)
 {
+  pinMode(PN532_IRQ, INPUT_PULLUP);
+
   Serial.begin(115200);
-  Serial.println("*** Testing Module PN532 NFC RFID ***");
+  Serial.println("\n*** Testing Module PN532 NFC RFID ***\n");
+
+  nfcConnect();
 }
 
 
 void loop(void)
 { 
-  readPassiveCard();
-  delay(750);
+    //check if there is NFC Card Detected.
+  if (cardReadWaiting) { 
+    handleCardDetected();
+  }
+
+  if (!cardReadWaiting && readerDisabled) {
+    if (millis() - timeLastCardRead > DELAY_BETWEEN_CARDS) {
+      readerDisabled = false;
+      startListeningToNFC();
+    }
+  }
 }
 
