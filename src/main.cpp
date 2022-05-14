@@ -29,7 +29,7 @@
 // Or use this line for a breakout or shield with an I2C connection:
 Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
 
-const int DELAY_BETWEEN_CARDS = 500;
+const int DELAY_BETWEEN_CARDS = 1000;//500 caused issue 
 long timeLastCardRead = 0;
 volatile bool connected = false;
 boolean readerDisabled = false;
@@ -49,6 +49,7 @@ void handleCardDetected() {
 
     // read the NFC tag's info
     success = nfc.readDetectedPassiveTargetID(uid, &uidLength);
+
     Serial.println(success ? "Read successful" : "Read failed (not a card?)");
 
   // If the card is detected, print the UID
@@ -110,8 +111,7 @@ bool nfcConnect() {
 }
 
 
-void setup(void)
-{
+void setup(void) {
   pinMode(PN532_IRQ, INPUT_PULLUP);
 
   Serial.begin(115200);
@@ -121,14 +121,12 @@ void setup(void)
 }
 
 
-void loop(void)
-{ 
-    //check if there is NFC Card Detected.
+void loop() {
+
+  //check if there is NFC Card Detected.
   if (cardReadWaiting) { 
     handleCardDetected();
-  }
-
-  if (!cardReadWaiting && readerDisabled) {
+  } else if (readerDisabled) {
     if (millis() - timeLastCardRead > DELAY_BETWEEN_CARDS) {
       readerDisabled = false;
       startListeningToNFC();
