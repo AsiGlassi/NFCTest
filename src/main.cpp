@@ -83,7 +83,6 @@ void startListeningToNFC() {
 
   //Enable interrupt after starting NFC
   nfc.startPassiveTargetIDDetection(PN532_MIFARE_ISO14443A);
-  delay(10);
   attachInterrupt(PN532_IRQ, detectsNFCCard, FALLING); 
 }
 
